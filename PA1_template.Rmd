@@ -1,25 +1,185 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "C5W2P"
+author: "Ramin Daneshvar"
+date: "5/17/2017"
+output: html_document
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+REPRODUCIBLE RESEARCH -- Course Project 1
+==========================================
+
+This assignment makes use of data from a personal activity monitoring device. This device collects data at 5 minute intervals through out the day. The data consists of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day.
 
 ## Loading and preprocessing the data
 
+The first step is to read data from the downloaded csv file. The file is already downloaded, decompressed and copied into the working directory. So, it is sufficient to read the file into a local data frame.
 
+```{r reading data}
+df<-read.csv("activity.csv")
+df2<-df
+```
+
+Looking at the data and their class:
+
+```{r}
+names(df)
+str(df)
+```
+
+As "date" is presented as a 'Factor' variable, I first converted it to a variable of "Date" class.
+
+```{r}
+df$date<-as.Date(df$date)
+```
 
 ## What is mean total number of steps taken per day?
 
+In this data frame, there are 17568 observations over 61 days period of the study. We should first calculate the total number of steps on each day, so, I used a 'tapply' function.
 
+```{r calculating total steps per day}
+TotalDailySteps<-with(df, tapply(steps, date, sum, na.rm=TRUE))
+```
+
+Now, I can make the histogram of total steps taken each day. As this is a simple histogram, 'base plotting system' is sufficient.
+
+```{r making histogram}
+hist(TotalDailySteps, col = "blue")
+```
+
+The next step is to report the mean and median of total number of steps taken each day. This is a simple and straight forward task! (It is nicer to set echo=FALE; however, per course instructions, I did not)
+
+```{r calculating central values}
+meanStep<-round(mean(TotalDailySteps), 2)
+medianStep<-round(median(TotalDailySteps), 2)
+```
+
+So, the *mean* total daily steps is `r meanStep` and the *median* is `r medianStep`.
 
 ## What is the average daily activity pattern?
 
+For this part of analysis, we should calculate average steps taken on each 15 minutes interval across all study period. Hence, I calculated it into a new variable.
 
+```{r calculating steps on each interval}
+intervalSteps<-with(df, tapply(steps, interval, mean, na.rm=TRUE))
+```
+
+Now, we can plot the mean step value for each interval. Again, 'base plotting system' is more the sufficient for this step.
+
+```{r making the line plot}
+plot(intervalSteps,axes = F, type="l", col="blue", xlab="Time", ylab="Average Number of Steps", main="Average Daily Activity Pattern")
+axis(1,at=c(0, 36, 72, 108, 144, 180, 216, 252, 288), label = c("0:00", "3:00","6:00", "9:00", "12:00","15:00","18:00","21:00","24:00"))
+axis(2)
+```
+
+
+We also have been asked about the interval with maximum average steps taken within. We can calculate it as follow:
+
+```{r max step}
+intervalSteps[which.max(intervalSteps)]
+```
+
+I can report this in a more readable and understandable format by calculating the time period and reporting the maximum value:
+
+```{r max step report}
+MaxStepID<-which.max(intervalSteps)
+Hour<-MaxStepID[[1]]%/%12
+IntervalMinuteEnd<-(MaxStepID[[1]]%/%12)*5
+IntervalMinuteStart<-IntervalMinuteEnd - 5
+maxStep<-intervalSteps[MaxStepID]
+```
+
+In this cohort, the highest average steps were taken between `r Hour`:`r IntervalMinuteStart` and `r Hour`:`r IntervalMinuteEnd` and had a maximum value of `r maxStep`.
 
 ## Imputing missing values
 
+First, I want to report the number of missing values.
 
+```{r missing}
+NAcount<-sum(is.na(df$steps))
+NAcount
+```
+
+In this data frame, there are `r NAcount` rows with *missing value* for 'Steps' variable.
+
+For imputing missing values, I use the very nice "MICE" package.
+
+```{r imputing missing data}
+library(mice)
+imputedValues<-mice(df2)
+```
+
+Now we have imputed values and can reconstruct the new database:
+
+```{r making new dataframe}
+imputedDF<-complete(imputedValues)
+```
+
+Preprocessing of new dataframe:
+```{r}
+imputedDF$date<-as.Date(imputedDF$date)
+```
+
+Now, we can use the same code as used in the first part of this assignment to produce the histogram and calculate the mean and median.
+
+1. Calculating total daily steps:
+```{r calculating total steps per day after imputation}
+TotalDailySteps_IDF<-with(imputedDF, tapply(steps, date, sum, na.rm=TRUE))
+```
+
+2. Making the histograms:
+```{r making 2nd histogram}
+hist(TotalDailySteps_IDF, col = "bisque")
+```
+
+3. Calculating the central values:
+
+```{r calculating 2nd set of central values}
+meanStep_IDF<-round(mean(TotalDailySteps_IDF), 2)
+medianStep_IDF<-round(median(TotalDailySteps_IDF), 2)
+```
+
+So, after imputation of the missing values, the *mean* total daily steps is `r meanStep_IDF` and the *median* is `r medianStep_IDF`.
+
+4. Calculating the resulted change in central values:
+
+```{r change}
+meanDiff<- meanStep - meanStep_IDF
+medianDiff<-medianStep - medianStep_IDF
+```
+
+After imputation, change in*mean* value is `r meanDiff` and change in *median* value is `r medianDiff`.
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+In the last step, we want to compare the difference between activity on weekdays and weekends. First, I defined a variable containing the name of each week day and then defined a second variable separating weekends.
+
+```{r weekdays}
+imputedDF$weekdays<-weekdays(imputedDF$date)
+imputedDF$dayType<-ifelse(imputedDF$weekdays%in%c("Saturday", "Sunday"), "Weekend", "Weekday")
+```
+
+Now, we can calculate average steps in each interval based on type of weekday:
+
+```{r average steps}
+intervalDaySteps<-aggregate(steps~interval+dayType, data = imputedDF, mean)
+```
+
+For plotting data in two panels, I use the ggplot2 system:
+
+```{r plotting in ggplot2}
+library(ggplot2)
+g1<-ggplot(intervalDaySteps, aes(interval, steps))
+g1 + geom_line() +
+        facet_grid(dayType ~ .) +
+        xlab("5-minute interval") + 
+        ylab("Number of steps")
+```
+
+This is the **END** of this project! 
+:)
+
+
